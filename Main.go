@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"io/ioutil"
 	"net/http"
 	lang_parser "something-proxy/lang-parser"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -68,8 +72,44 @@ func main() {
 		input := strings.NewReader(fmt.Sprintf("%s\n", req.Body))
 		read := lang_parser.NewReader(bufio.NewReader(input))
 		readSexp, err := read.Read()
-		//todo: calc complexity of readSexp
 		fmt.Println(readSexp.String())
+		var wg sync.WaitGroup
+
+		// get all machine with prefix /machine/
+		res, err := cli.Get(context.Background(), "/machine", clientv3.WithPrefix())
+		if err != nil {
+			panic(err)
+		}
+		var machineList []struct {
+			Machine   string
+			WaitCount int
+		}
+		for _, kv := range res.Kvs {
+			kv := kv
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				resp, err := http.Get(string(kv.Value) + "/routine-count")
+				if err != nil {
+					fmt.Println(err.Error())
+					return
+				}
+				byteArray, _ := ioutil.ReadAll(resp.Body)
+				count, _ := strconv.Atoi(string(byteArray))
+				machineList = append(machineList, struct {
+					Machine   string
+					WaitCount int
+				}{Machine: string(kv.Value), WaitCount: count})
+				defer resp.Body.Close()
+			}()
+		}
+		wg.Wait()
+		sort.Slice(machineList, func(i, j int) bool {
+			return machineList[i].WaitCount < machineList[j].WaitCount
+		})
+		c.JSON(200, gin.H{
+			"addr": machineList[0].Machine,
+		})
 	})
 	engine.Run(":80")
 
