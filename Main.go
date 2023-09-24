@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -10,7 +11,6 @@ import (
 	"net/http"
 	lang_parser "something-proxy/lang-parser"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -95,11 +95,14 @@ func main() {
 					return
 				}
 				byteArray, _ := ioutil.ReadAll(resp.Body)
-				count, _ := strconv.Atoi(string(byteArray))
+				var countJson struct {
+					Count int `json:"count"`
+				}
+				json.Unmarshal(byteArray, &countJson)
 				machineList = append(machineList, struct {
 					Machine   string
 					WaitCount int
-				}{Machine: string(kv.Value), WaitCount: count})
+				}{Machine: string(kv.Value), WaitCount: countJson.Count})
 				defer resp.Body.Close()
 			}()
 		}
