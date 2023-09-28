@@ -114,12 +114,10 @@ func main() {
 			"addr": machineList[0].Machine,
 		})
 	})
-	engine.Run(":80")
-
 	//health check
 	go func() {
 		//30 sec check
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		for {
 			select {
 			case <-ticker.C:
@@ -143,4 +141,5 @@ func main() {
 			}
 		}
 	}()
+	engine.Run(":80")
 }
