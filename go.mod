@@ -3,13 +3,14 @@ module something-proxy
 go 1.18
 
 require (
+	github.com/bytedance/sonic v1.10.0
 	github.com/gin-gonic/gin v1.9.1
 	go.etcd.io/etcd/client/v3 v3.5.9
 )
 
 require (
-	github.com/bytedance/sonic v1.9.1 // indirect
-	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
+	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
+	github.com/chenzhuoyu/iasm v0.9.0 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect

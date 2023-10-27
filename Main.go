@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,9 +8,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"io/ioutil"
 	"net/http"
-	lang_parser "something-proxy/lang-parser"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -69,10 +66,10 @@ func main() {
 			})
 			return
 		}
-		input := strings.NewReader(fmt.Sprintf("%s\n", req.Body))
-		read := lang_parser.NewReader(bufio.NewReader(input))
-		readSexp, err := read.Read()
-		fmt.Println(readSexp.String())
+		//input := strings.NewReader(fmt.Sprintf("%s\n", req.Body))
+		//read := lang_parser.NewReader(bufio.NewReader(input))
+		//readSexp, err := read.Read()
+		//fmt.Println(readSexp.String())
 		var wg sync.WaitGroup
 
 		// get all machine with prefix /machine/
