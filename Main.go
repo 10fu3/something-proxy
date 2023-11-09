@@ -27,10 +27,9 @@ type AddMachineRequest struct {
 func main() {
 
 	conf := config.Get()
-
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("http://%s:%d", conf.EtcdHost, conf.EtcdPort)},
-		DialTimeout: 5 * time.Second,
+		Endpoints:   []string{fmt.Sprintf("http://%s:%s", conf.EtcdHost, conf.EtcdPort)},
+		DialTimeout: 10 * time.Second,
 	})
 	if err != nil {
 		panic(err)
@@ -48,7 +47,7 @@ func main() {
 			})
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		_, err = cli.Put(ctx, "/machine/"+req.From, req.From)
