@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"something-proxy/config"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -19,9 +20,15 @@ type TaskAddRequest struct {
 	From string `json:"from"`
 }
 
-type AddMachineRequest struct {
+type AddMachineRequestFromHeavy struct {
 	MachineType string `json:"machine_type"`
 	From        string `json:"from"`
+}
+
+type AddMachineRequestFromClient struct {
+	MachineType       string `json:"machine_type"`
+	From              string `json:"from"`
+	GlobalNamespaceId string `json:"global_namespace_id"`
 }
 
 func main() {
@@ -38,8 +45,8 @@ func main() {
 	defer cli.Close()
 
 	engine := gin.Default()
-	engine.POST("/register", func(c *gin.Context) {
-		var req AddMachineRequest
+	engine.POST("/register-heavy", func(c *gin.Context) {
+		var req AddMachineRequestFromHeavy
 		err := c.ShouldBind(&req)
 		if err != nil {
 			c.JSON(400, gin.H{
@@ -50,7 +57,28 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		_, err = cli.Put(ctx, "/machine/"+req.From, req.From)
+		_, err = cli.Put(ctx, "/machine-heavy/"+req.From, req.From)
+		if err != nil {
+			c.JSON(400, gin.H{
+				"status": err.Error(),
+			})
+			return
+		}
+		c.Status(200)
+	})
+	engine.POST("/register-client", func(c *gin.Context) {
+		var req AddMachineRequestFromClient
+		err := c.ShouldBind(&req)
+		if err != nil {
+			c.JSON(400, gin.H{
+				"status": "need self id",
+			})
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
+
+		_, err = cli.Put(ctx, fmt.Sprintf("/client/%s", req.From), req.From+"$"+req.GlobalNamespaceId)
 		if err != nil {
 			c.JSON(400, gin.H{
 				"status": err.Error(),
@@ -75,7 +103,7 @@ func main() {
 		var wg sync.WaitGroup
 
 		// get all machine with prefix /machine/
-		res, err := cli.Get(context.Background(), "/machine", clientv3.WithPrefix())
+		res, err := cli.Get(context.Background(), "/machine-heavy", clientv3.WithPrefix())
 		if err != nil {
 			panic(err)
 		}
@@ -121,22 +149,45 @@ func main() {
 			select {
 			case <-ticker.C:
 				{
-					// get all machine with prefix /machine/
-					res, err := cli.Get(context.Background(), "/machine/", clientv3.WithPrefix())
-					if err != nil {
-						panic(err)
-					}
-					for _, kv := range res.Kvs {
-						kv := kv
-						go func() {
-							get, err := http.Get(string(kv.Value) + "/health")
-							if err != nil || get.StatusCode != 200 {
-								fmt.Println("delete: " + string(kv.Value))
-								cli.Delete(context.Background(), "/machine/"+string(kv.Value))
-								return
-							}
-						}()
-					}
+					go func() {
+						// get all machine with prefix /machine/
+						res, err := cli.Get(context.Background(), "/machine-heavy/", clientv3.WithPrefix())
+						if err != nil {
+							panic(err)
+						}
+						for _, kv := range res.Kvs {
+							kv := kv
+							go func() {
+								get, err := http.Get(string(kv.Value) + "/health")
+								if err != nil || get.StatusCode != 200 {
+									fmt.Println("delete: " + string(kv.Value))
+									cli.Delete(context.Background(), "/machine-heavy/"+string(kv.Value))
+									return
+								}
+							}()
+						}
+					}()
+					go func() {
+						// get all machine with prefix /client/
+						res, err := cli.Get(context.Background(), "/client/", clientv3.WithPrefix())
+						if err != nil {
+							panic(err)
+						}
+						for _, kv := range res.Kvs {
+							kv := kv
+							go func() {
+								fromAndNamespace := strings.Split(string(kv.Value), "$")
+
+								get, err := http.Get(fromAndNamespace[0] + "/health")
+								if err != nil || get.StatusCode != 200 {
+									fmt.Println("delete: " + string(kv.Value))
+									cli.Delete(context.Background(), "/env/"+fromAndNamespace[1], clientv3.WithPrefix())
+									cli.Delete(context.Background(), "/client/"+fromAndNamespace[0])
+									return
+								}
+							}()
+						}
+					}()
 				}
 			}
 		}
