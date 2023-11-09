@@ -8,6 +8,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"io/ioutil"
 	"net/http"
+	"something-proxy/config"
 	"sort"
 	"sync"
 	"time"
@@ -25,8 +26,10 @@ type AddMachineRequest struct {
 
 func main() {
 
+	conf := config.Get()
+
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"http://localhost:2379"},
+		Endpoints:   []string{fmt.Sprintf("http://%s:%d", conf.EtcdHost, conf.EtcdPort)},
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
