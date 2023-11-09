@@ -131,6 +131,7 @@ func main() {
 						go func() {
 							get, err := http.Get(string(kv.Value) + "/health")
 							if err != nil || get.StatusCode != 200 {
+								fmt.Println("delete: " + string(kv.Value))
 								cli.Delete(context.Background(), "/machine/"+string(kv.Value))
 								return
 							}
