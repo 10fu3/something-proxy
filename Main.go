@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v2"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"io/ioutil"
 	"net/http"
@@ -44,57 +44,55 @@ func main() {
 
 	defer cli.Close()
 
-	engine := gin.Default()
-	engine.POST("/register-heavy", func(c *gin.Context) {
+	engine := fiber.New()
+
+	engine.Post("/register-heavy", func(c *fiber.Ctx) error {
 		var req AddMachineRequestFromHeavy
-		err := c.ShouldBind(&req)
+		err := c.BodyParser(&req)
 		if err != nil {
-			c.JSON(400, gin.H{
+			return c.JSON(fiber.Map{
 				"status": "need self id",
 			})
-			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		_, err = cli.Put(ctx, "/machine-heavy/"+req.From, req.From)
 		if err != nil {
-			c.JSON(400, gin.H{
+			return c.JSON(fiber.Map{
 				"status": err.Error(),
 			})
-			return
 		}
 		c.Status(200)
+		return nil
 	})
-	engine.POST("/register-client", func(c *gin.Context) {
+	engine.Post("/register-client", func(c *fiber.Ctx) error {
 		var req AddMachineRequestFromClient
-		err := c.ShouldBind(&req)
+		err := c.BodyParser(&req)
 		if err != nil {
-			c.JSON(400, gin.H{
+			return c.JSON(fiber.Map{
 				"status": "need self id",
 			})
-			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		_, err = cli.Put(ctx, fmt.Sprintf("/client/%s", req.From), req.From+"$"+req.GlobalNamespaceId)
 		if err != nil {
-			c.JSON(400, gin.H{
+			return c.JSON(fiber.Map{
 				"status": err.Error(),
 			})
-			return
 		}
 		c.Status(200)
+		return nil
 	})
-	engine.POST("/send-request", func(c *gin.Context) {
+	engine.Post("/send-request", func(c *fiber.Ctx) error {
 		var req TaskAddRequest
-		err := c.ShouldBind(&req)
+		err := c.BodyParser(&req)
 		if err != nil {
-			c.JSON(400, gin.H{
+			return c.JSON(fiber.Map{
 				"status": "need self id",
 			})
-			return
 		}
 		//input := strings.NewReader(fmt.Sprintf("%s\n", req.Body))
 		//read := lang_parser.NewReader(bufio.NewReader(input))
@@ -137,7 +135,7 @@ func main() {
 		sort.Slice(machineList, func(i, j int) bool {
 			return machineList[i].WaitCount < machineList[j].WaitCount
 		})
-		c.JSON(200, gin.H{
+		return c.JSON(fiber.Map{
 			"addr": machineList[0].Machine,
 		})
 	})
@@ -192,5 +190,7 @@ func main() {
 			}
 		}
 	}()
-	engine.Run(":80")
+	if err := engine.Listen(fmt.Sprintf(":%s", "80")); err != nil {
+		panic(err)
+	}
 }
