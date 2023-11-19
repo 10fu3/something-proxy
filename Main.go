@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"something-proxy/config"
 	"sort"
@@ -18,6 +19,11 @@ import (
 type TaskAddRequest struct {
 	Body string `json:"body"`
 	From string `json:"from"`
+}
+
+type TaskAddRequests struct {
+	BodyCount int64  `json:"body_count"`
+	From      string `json:"from"`
 }
 
 type AddMachineRequestFromHeavy struct {
@@ -137,6 +143,79 @@ func main() {
 		})
 		return c.JSON(fiber.Map{
 			"addr": machineList[0].Machine,
+		})
+	})
+	engine.Post("/send-requests", func(c *fiber.Ctx) error {
+		var req TaskAddRequests
+		err := c.BodyParser(&req)
+		if err != nil {
+			return c.JSON(fiber.Map{
+				"status": "need self id",
+			})
+		}
+		var wg sync.WaitGroup
+
+		// get all machine with prefix /machine/
+		res, err := cli.Get(context.Background(), "/machine-heavy", clientv3.WithPrefix())
+		if err != nil {
+			panic(err)
+		}
+		var machineList []struct {
+			Machine   string
+			WaitCount int64
+		}
+		for _, kv := range res.Kvs {
+			kv := kv
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				resp, err := http.Get(string(kv.Value) + "/routine-count")
+				if err != nil {
+					fmt.Println(err.Error())
+					return
+				}
+				byteArray, _ := ioutil.ReadAll(resp.Body)
+				var countJson struct {
+					Count int64 `json:"count"`
+				}
+				json.Unmarshal(byteArray, &countJson)
+				machineList = append(machineList, struct {
+					Machine   string
+					WaitCount int64
+				}{Machine: string(kv.Value), WaitCount: countJson.Count})
+				defer resp.Body.Close()
+			}()
+		}
+		wg.Wait()
+
+		totalTaskCount := int64(0)
+		remainingTasksCount := totalTaskCount
+		for _, machine := range machineList {
+			totalTaskCount += machine.WaitCount
+		}
+		idealTaskCount := int64(math.Ceil(float64(totalTaskCount+req.BodyCount) / float64(len(machineList))))
+		var sendTaskCountPair []struct {
+			Machine string
+			Count   int64
+		}
+		for _, machine := range machineList {
+
+			if remainingTasksCount <= 0 {
+				break
+			}
+
+			diffCount := min(idealTaskCount-machine.WaitCount, remainingTasksCount)
+			if diffCount > 0 {
+				sendTaskCountPair = append(sendTaskCountPair, struct {
+					Machine string
+					Count   int64
+				}{Machine: machine.Machine, Count: diffCount})
+			}
+			remainingTasksCount -= diffCount
+		}
+
+		return c.JSON(fiber.Map{
+			"machines": sendTaskCountPair,
 		})
 	})
 	//health check
